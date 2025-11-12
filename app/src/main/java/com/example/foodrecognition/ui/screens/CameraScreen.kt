@@ -23,7 +23,7 @@ import androidx.core.content.ContextCompat
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
-
+/*
 @Composable
 fun CameraScreen(onImageCaptured: (Uri) -> Unit) {
     val context = LocalContext.current
@@ -102,4 +102,71 @@ private fun takePhoto(context: Context, imageCapture: ImageCapture?, onImageCapt
         }
     )
 }
+ */
+@Composable
+fun CameraScreen(onImageCaptured: (Uri) -> Unit) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val imageCapture = remember { ImageCapture.Builder().build() }
+
+    val cameraProviderFuture = remember {
+        ProcessCameraProvider.getInstance(context)
+    }
+
+    val previewView = remember { PreviewView(context) }
+
+    LaunchedEffect(Unit) {
+        val cameraProvider = cameraProviderFuture.get()
+        val preview = Preview.Builder().build().also {
+            it.setSurfaceProvider(previewView.surfaceProvider)
+        }
+        cameraProvider.unbindAll()
+        cameraProvider.bindToLifecycle(
+            lifecycleOwner,
+            CameraSelector.DEFAULT_BACK_CAMERA,
+            preview,
+            imageCapture
+        )
+    }
+
+    var photoUri by remember { mutableStateOf<Uri?>(null) }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        AndroidView(factory = { previewView }, modifier = Modifier.weight(1f))
+        Button(
+            onClick = {
+                val photoFile = File(
+                    context.externalCacheDir,
+                    "photo_${System.currentTimeMillis()}.jpg"
+                )
+                val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+                imageCapture.takePicture(
+                    outputOptions,
+                    ContextCompat.getMainExecutor(context),
+                    object : ImageCapture.OnImageSavedCallback {
+                        override fun onError(exc: ImageCaptureException) {
+                            Log.e("CameraScreen", "Photo capture failed: ${exc.message}", exc)
+                        }
+
+                        override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                            val uri = Uri.fromFile(photoFile)
+                            onImageCaptured(uri)
+                            photoUri = uri
+                        }
+                    }
+                )
+            },
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth()
+        ) {
+            Text("Take Photo")
+        }
+    }
+}
+
 
