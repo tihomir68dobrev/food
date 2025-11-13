@@ -40,8 +40,9 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.4.3"
+        kotlinCompilerExtensionVersion = "1.5.2" // match latest stable Compose
     }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -61,6 +62,11 @@ dependencies {
     // Optional for preview and extensions
     implementation("androidx.camera:camera-view:$cameraxVersion")
     implementation("androidx.camera:camera-extensions:$cameraxVersion")
+
+    // Coil for Jetpack Compose
+
+    implementation("io.coil-kt:coil-compose:2.4.0")
+
 
 
     implementation("androidx.core:core-ktx:1.9.0")
