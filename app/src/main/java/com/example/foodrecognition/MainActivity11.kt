@@ -1,9 +1,8 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-
 package com.example.foodrecognition
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.util.Base64
@@ -15,7 +14,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,27 +22,23 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.*
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.camera.view.PreviewView
+import java.io.File
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 
-
-data class FoodItem(
-    val name: String,
-    val calories: Int,
-    var gramsInput: String = ""
-)
+/*
+data class FoodItem(val name: String, val calories: Int)
 
 class MainActivity : ComponentActivity() {
 
@@ -78,20 +72,19 @@ fun CameraScreen() {
 
     val imageCapture = remember { ImageCapture.Builder().build() }
 
-    val permissionLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
-                Toast.makeText(context, "Camera permission granted", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, "Camera permission denied", Toast.LENGTH_SHORT).show()
-            }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            Toast.makeText(context, "Camera permission granted", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Camera permission denied", Toast.LENGTH_SHORT).show()
         }
+    }
 
     LaunchedEffect(Unit) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            permissionLauncher.launch(Manifest.permission.CAMERA)
+            launcher.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -101,7 +94,6 @@ fun CameraScreen() {
             .padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-
         AndroidView(
             factory = { ctx ->
                 val previewView = PreviewView(ctx)
@@ -128,8 +120,6 @@ fun CameraScreen() {
                 .weight(1f)
                 .fillMaxWidth()
         )
-
-        Spacer(modifier = Modifier.height(8.dp))
 
         Button(onClick = {
             val photoFile = File(
@@ -175,67 +165,11 @@ fun CameraScreen() {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-        ) {
-            itemsIndexed(foodList) { index, food ->
-
-                val grams = food.gramsInput
-
-                val caloriesForFood = grams.toDoubleOrNull()?.let {
-                    food.calories * it / 100.0
-                } ?: 0.0
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    elevation = CardDefaults.cardElevation(4.dp)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text("${food.name}", style = MaterialTheme.typography.titleMedium)
-                        Text("Calories per 100g: ${food.calories}", style = MaterialTheme.typography.bodySmall)
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        OutlinedTextField(
-                            value = grams,
-                            onValueChange = { input ->
-                                // Only digits
-                                val filtered = input.filter { it.isDigit() }
-
-                                // Update foodList
-                                foodList = foodList.toMutableList().also {
-                                    it[index] = it[index].copy(gramsInput = filtered)
-                                }
-                            },
-                            label = { Text("Grams") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-
-                        Text(
-                            "Calories: %.1f kcal".format(caloriesForFood),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-                }
+        LazyColumn {
+            items(foodList) { food ->
+                Text("${food.name} - ${food.calories} cal / 100g")
             }
         }
-
-
-        val totalCalories = foodList.sumOf { f ->
-            f.gramsInput.toDoubleOrNull()?.let { it * f.calories / 100.0 } ?: 0.0
-        }
-
-        Text(
-            "Total Calories: %.1f kcal".format(totalCalories),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(top = 16.dp)
-        )
     }
 }
 
@@ -245,8 +179,9 @@ suspend fun analyzeFood(photoUri: Uri, context: android.content.Context): List<F
             val inputStream = context.contentResolver.openInputStream(photoUri)
             val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
             val byteArrayOutputStream = ByteArrayOutputStream()
-            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, byteArrayOutputStream)
-            val base64Image = Base64.encodeToString(byteArrayOutputStream.toByteArray(), Base64.NO_WRAP)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, byteArrayOutputStream)
+            val base64Image =
+                Base64.encodeToString(byteArrayOutputStream.toByteArray(), Base64.NO_WRAP)
 
             val json = """
             {
@@ -289,8 +224,14 @@ suspend fun analyzeFood(photoUri: Uri, context: android.content.Context): List<F
                     .getJSONObject(0)
                     .getString("text")
 
+                Log.d("API_PARSED", text)
+
+                // Parse response JSON (from Gemini text)
                 val items = mutableListOf<FoodItem>()
-                val clean = text.replace("```json", "").replace("```", "").trim()
+                val clean = text.replace("```json", "")
+                    .replace("```", "")
+                    .trim()
+
                 val foods = org.json.JSONArray(clean)
                 for (i in 0 until foods.length()) {
                     val obj = foods.getJSONObject(i)
@@ -298,16 +239,11 @@ suspend fun analyzeFood(photoUri: Uri, context: android.content.Context): List<F
                 }
                 items
             } else {
+                Log.e("API_ERROR", "Response failed or empty")
                 emptyList()
             }
         } catch (e: Exception) {
             Log.e("analyzeFood", "Error analyzing food", e)
             emptyList()
         }
-    }
-
-
-
-
-
-
+    } */

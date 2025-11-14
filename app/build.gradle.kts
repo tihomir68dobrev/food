@@ -29,18 +29,22 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
+
     kotlinOptions {
         jvmTarget = "1.8"
     }
+
     buildFeatures {
         compose = true
     }
+
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.2" // match latest stable Compose
+        kotlinCompilerExtensionVersion = "1.5.2"
     }
 
     packaging {
@@ -49,39 +53,39 @@ android {
         }
     }
 }
-val cameraxVersion = "1.3.4"
-dependencies {
 
+val cameraxVersion = "1.3.4"
+
+dependencies {
+    // --- CameraX ---
     implementation("androidx.camera:camera-core:$cameraxVersion")
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
-    implementation ("androidx.camera:camera-view:$cameraxVersion")
-    implementation ("androidx.camera:camera-extensions:$cameraxVersion")
-
-
-    // Optional for preview and extensions
     implementation("androidx.camera:camera-view:$cameraxVersion")
     implementation("androidx.camera:camera-extensions:$cameraxVersion")
 
-    // Coil for Jetpack Compose
-
+    // --- Coil for Compose ---
     implementation("io.coil-kt:coil-compose:2.4.0")
 
-
-
-    implementation("androidx.core:core-ktx:1.9.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2")
-    implementation("androidx.activity:activity-compose:1.9.0")
+    // --- Compose ---
     implementation(platform("androidx.compose:compose-bom:2023.03.00"))
     implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose:1.9.0")
+    debugImplementation("androidx.compose.ui:ui-tooling")
 
+    // --- Navigation ---
     implementation("androidx.navigation:navigation-compose:2.8.3")
 
+    // --- Core & Lifecycle ---
+    implementation("androidx.core:core-ktx:1.9.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.2")
+
+    // --- Network ---
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
+    // --- Tests ---
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
