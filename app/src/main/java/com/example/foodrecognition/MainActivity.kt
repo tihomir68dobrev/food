@@ -1,11 +1,14 @@
+
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.example.foodrecognition
 
 import android.Manifest
+import android.app.Application
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.util.Base64
 import android.util.Log
 import android.widget.Toast
@@ -18,26 +21,36 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.*
+import com.example.foodrecognition.data.entities.MealEntity
+import com.example.foodrecognition.viewmodel.MealViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.text.SimpleDateFormat
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 
 
 data class FoodItem(
@@ -56,7 +69,19 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                CameraScreen()
+
+                val navController = rememberNavController()
+
+                NavHost(navController = navController, startDestination = "camera") {
+
+                    composable("camera") {
+                        CameraScreen(navController)
+                    }
+
+                    composable("history") {
+                        HistoryScreen()
+                    }
+                }
             }
         }
     }
@@ -68,23 +93,24 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun CameraScreen() {
+fun CameraScreen(navController: NavController) {
+
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+    val viewModel: MealViewModel = viewModel(
+        factory = ViewModelProvider.AndroidViewModelFactory(context.applicationContext as Application)
+    )
+
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var foodList by remember { mutableStateOf<List<FoodItem>>(emptyList()) }
     val coroutineScope = rememberCoroutineScope()
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
-
     val imageCapture = remember { ImageCapture.Builder().build() }
 
     val permissionLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
-                Toast.makeText(context, "Camera permission granted", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, "Camera permission denied", Toast.LENGTH_SHORT).show()
-            }
+            if (!granted) Toast.makeText(context, "Camera permission denied", Toast.LENGTH_SHORT).show()
         }
 
     LaunchedEffect(Unit) {
@@ -96,9 +122,7 @@ fun CameraScreen() {
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(8.dp),
+        modifier = Modifier.fillMaxSize().padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
@@ -124,27 +148,24 @@ fun CameraScreen() {
 
                 previewView
             },
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
+            modifier = Modifier.weight(1f).fillMaxWidth()
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
         Button(onClick = {
             val photoFile = File(
-                context.cacheDir,
+                context.getExternalFilesDir(Environment.DIRECTORY_PICTURES),
                 "photo_${System.currentTimeMillis()}.jpg"
             )
 
-            val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+            val output = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
             imageCapture.takePicture(
-                outputOptions,
+                output,
                 ContextCompat.getMainExecutor(context),
                 object : ImageCapture.OnImageSavedCallback {
                     override fun onError(exc: ImageCaptureException) {
-                        Log.e("Camera", "Photo capture failed: ${exc.message}", exc)
                         Toast.makeText(context, "Capture failed", Toast.LENGTH_SHORT).show()
                     }
 
@@ -166,7 +187,7 @@ fun CameraScreen() {
                     coroutineScope.launch {
                         foodList = analyzeFood(uri, context)
                     }
-                } ?: Toast.makeText(context, "No photo taken yet", Toast.LENGTH_SHORT).show()
+                } ?: Toast.makeText(context, "No photo", Toast.LENGTH_SHORT).show()
             },
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -176,9 +197,7 @@ fun CameraScreen() {
         Spacer(modifier = Modifier.height(12.dp))
 
         LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
+            modifier = Modifier.weight(1f).fillMaxWidth()
         ) {
             itemsIndexed(foodList) { index, food ->
 
@@ -189,24 +208,18 @@ fun CameraScreen() {
                 } ?: 0.0
 
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     elevation = CardDefaults.cardElevation(4.dp)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text("${food.name}", style = MaterialTheme.typography.titleMedium)
-                        Text("Calories per 100g: ${food.calories}", style = MaterialTheme.typography.bodySmall)
+                    Column(Modifier.padding(12.dp)) {
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(food.name, style = MaterialTheme.typography.titleMedium)
+                        Text("Calories / 100g: ${food.calories}")
 
                         OutlinedTextField(
                             value = grams,
                             onValueChange = { input ->
-                                // Only digits
                                 val filtered = input.filter { it.isDigit() }
-
-                                // Update foodList
                                 foodList = foodList.toMutableList().also {
                                     it[index] = it[index].copy(gramsInput = filtered)
                                 }
@@ -216,26 +229,99 @@ fun CameraScreen() {
                             singleLine = true
                         )
 
-                        Text(
-                            "Calories: %.1f kcal".format(caloriesForFood),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
+                        Text("Calories: %.1f kcal".format(caloriesForFood))
                     }
                 }
             }
         }
-
 
         val totalCalories = foodList.sumOf { f ->
             f.gramsInput.toDoubleOrNull()?.let { it * f.calories / 100.0 } ?: 0.0
         }
 
         Text(
-            "Total Calories: %.1f kcal".format(totalCalories),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(top = 16.dp)
+            "Total Calories: %.1f".format(totalCalories),
+            style = MaterialTheme.typography.titleLarge
         )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Button(onClick = {
+                if (imageUri == null || foodList.isEmpty()) {
+                    Toast.makeText(context, "Nothing to save", Toast.LENGTH_SHORT).show()
+                    return@Button
+                }
+
+                val jsonItems = JSONArray().apply {
+                    foodList.forEach {
+                        put(JSONObject().apply {
+                            put("name", it.name)
+                            put("calories", it.calories)
+                            put("grams", it.gramsInput)
+                        })
+                    }
+                }.toString()
+
+                val meal = MealEntity(
+                    timestamp = System.currentTimeMillis(),
+                    imagePath = imageUri!!.path,
+                    totalCalories = totalCalories.toInt(),
+                    itemsJson = jsonItems
+                )
+
+                viewModel.saveMeal(meal)
+                Toast.makeText(context, "Saved", Toast.LENGTH_SHORT).show()
+
+            }) {
+                Text("SAVE")
+            }
+
+            Button(onClick = {
+                navController.navigate("history")
+            }) {
+                Text("HISTORY")
+            }
+        }
+    }
+}
+
+@Composable
+fun HistoryScreen() {
+
+    val context = LocalContext.current
+
+    val viewModel: MealViewModel = viewModel(
+        factory = ViewModelProvider.AndroidViewModelFactory(context.applicationContext as Application)
+    )
+
+    val meals by viewModel.history.collectAsState(initial = emptyList())
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+
+        Text("History", style = MaterialTheme.typography.titleLarge)
+
+        LazyColumn {
+            itemsIndexed(meals) { _, meal ->
+
+                Card(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+
+                        val date = SimpleDateFormat("dd/MM/yyyy HH:mm")
+                            .format(meal.timestamp)
+
+                        Text("Date: $date")
+                        Text("Total calories: ${meal.totalCalories}")
+                        Text("Items: ${meal.itemsJson}")
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -264,7 +350,7 @@ suspend fun analyzeFood(photoUri: Uri, context: android.content.Context): List<F
                 }
               ]
             }
-            """.trimIndent()
+            """
 
             val body = RequestBody.create("application/json".toMediaTypeOrNull(), json)
 
@@ -277,8 +363,6 @@ suspend fun analyzeFood(photoUri: Uri, context: android.content.Context): List<F
             val response = client.newCall(request).execute()
             val responseBody = response.body?.string()
 
-            Log.d("API_RESPONSE", responseBody ?: "null")
-
             if (responseBody != null && response.isSuccessful) {
                 val jsonObject = JSONObject(responseBody)
                 val text = jsonObject
@@ -289,22 +373,29 @@ suspend fun analyzeFood(photoUri: Uri, context: android.content.Context): List<F
                     .getJSONObject(0)
                     .getString("text")
 
-                val items = mutableListOf<FoodItem>()
                 val clean = text.replace("```json", "").replace("```", "").trim()
-                val foods = org.json.JSONArray(clean)
+
+                val items = mutableListOf<FoodItem>()
+                val foods = JSONArray(clean)
+
                 for (i in 0 until foods.length()) {
                     val obj = foods.getJSONObject(i)
-                    items.add(FoodItem(obj.getString("name"), obj.getInt("calories")))
+                    items.add(
+                        FoodItem(
+                            obj.getString("name"),
+                            obj.getInt("calories")
+                        )
+                    )
                 }
                 items
-            } else {
-                emptyList()
-            }
+            } else emptyList()
+
         } catch (e: Exception) {
-            Log.e("analyzeFood", "Error analyzing food", e)
+            Log.e("analyzeFood", "Error", e)
             emptyList()
         }
     }
+
 
 
 
